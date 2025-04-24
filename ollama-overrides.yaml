@@ -1,0 +1,17 @@
+global:
+  imagePullSecrets:
+  - application-collection
+ingress:
+  enabled: false
+defaultModel: "gemma:2b"
+ollama:
+  models:
+    - "gemma:2b"
+    - "llama3.1"
+  gpu:
+    enabled: true
+    type: 'nvidia'
+    number: 1
+persistentVolume:
+  enabled: true
+  storageClass: local-path
