@@ -139,7 +139,7 @@ resource "aws_instance" "sle_micro_6" {
       type        = "ssh"
       user        = "ec2-user"
       private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-      host        = aws_eip.ec2_eip.public_ip
+      host        = self.public_ip
     }
   }
 }
