@@ -257,3 +257,28 @@ resource "kubernetes_secret" "suse-appco-registry" {
     })
   }
 }
+
+
+## Add cert-manager using helm:
+
+resource "helm_release" "cert_manager" {
+  name       = "cert-manager"
+  namespace  = var.suse_ai_namespace
+  repository = "oci://${var.registry_name}/charts"
+  chart      = "cert-manager"
+
+  create_namespace = true
+
+  depends_on = [kubernetes_secret.suse-appco-registry]
+
+  set {
+    name  = "crds.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "global.imagePullSecrets[0].name"
+    value = kubernetes_secret.suse-appco-registry.metadata[0].name
+  }
+}
+

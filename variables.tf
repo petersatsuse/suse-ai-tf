@@ -58,3 +58,8 @@ variable "suse_ai_namespace" {
   description = "Name of the namespace where you want to deploy SUSE AI Stack!"
 }
 
+variable "cert_manager_namespace" {
+  type        = string
+  default     = "cert-manager"
+  description = "Name of the namespace where you want to deploy cert-manager"
+}
