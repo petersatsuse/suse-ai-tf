@@ -98,6 +98,13 @@ resource "aws_security_group" "ssh" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -130,9 +137,29 @@ resource "aws_instance" "sle_micro_6" {
   subnet_id              = aws_subnet.test_subnet.id
   vpc_security_group_ids = [aws_security_group.ssh.id]
 
+  root_block_device {
+    volume_size = 150 # Specify the desired volume size in GiB
+  }
+
+  #  user_data = file("${path.module}/install-rke2server-localpath.sh")
+
+  #  provisioner "file" {
+  #    source = "${path.module}/install-rke2server-localpath.sh"
+  #    destination = "/tmp/install-rke2server-localpath.sh"
+
+  #  connection {
+  #      type        = "ssh"
+  #      user        = "ec2-user"
+  #      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+  #      host        = self.public_ip
+  #    }
+  #  }
+
   provisioner "remote-exec" {
     inline = [
-      "sudo transactional-update register -r ${var.registration_code}"
+      "sudo transactional-update register -r ${var.registration_code}",
+      "sudo transactional-update --continue run zypper install -y curl",
+      "sudo reboot"
     ]
 
     connection {
@@ -147,4 +174,54 @@ resource "aws_instance" "sle_micro_6" {
 resource "aws_eip_association" "eip_assoc" {
   instance_id   = aws_instance.sle_micro_6.id
   allocation_id = aws_eip.ec2_eip.id
+}
+
+resource "null_resource" "post_reboot" {
+  depends_on = [aws_instance.sle_micro_6]
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Reconnected after reboot'",
+      "echo 'Creating the RKE2 config file...'",
+      "sudo mkdir -p /etc/rancher/rke2/ && sudo tee /etc/rancher/rke2/config.yaml > /dev/null <<EOF",
+      "tls-san:",
+      "  - ${aws_eip.ec2_eip.public_ip}",
+      "EOF",
+      "sudo curl -sfL https://get.rke2.io |sudo sh -",
+      "sudo systemctl enable --now rke2-server",
+      "sudo echo 'Waiting for RKE2-server to be ready...'",
+      "while ! sudo systemctl is-active --quiet rke2-server; do echo 'Waiting for RKE2 to be active...'; sleep 10; done",
+      "echo 'RKE2 server is active. Setting KUBECONFIG and applying localpath provisioner.'",
+      "sudo sh -c 'export PATH=$PATH:/opt/rke2/bin:/var/lib/rancher/rke2/bin && export KUBECONFIG=/etc/rancher/rke2/rke2.yaml && /var/lib/rancher/rke2/bin/kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.31/deploy/local-path-storage.yaml'"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+      host        = aws_eip.ec2_eip.public_ip
+    }
+  }
+}
+
+resource "null_resource" "download_kubeconfig" {
+  depends_on = [null_resource.post_reboot]
+  provisioner "remote-exec" {
+    inline = [
+      "sudo cp /etc/rancher/rke2/rke2.yaml /tmp/rke2.yaml",
+      "sudo chown ec2-user:ec2-user /tmp/rke2.yaml",
+      "sudo sed -i 's/127.0.0.1/${aws_eip.ec2_eip.public_ip}/g' /tmp/rke2.yaml"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+      host        = aws_eip.ec2_eip.public_ip
+    }
+  }
+
+  provisioner "local-exec" {
+    command = "scp -o StrictHostKeyChecking=no -i ${path.module}/tf-ssh-private_key ec2-user@${aws_eip.ec2_eip.public_ip}:/tmp/rke2.yaml ./kubeconfig-rke2.yaml"
+  }
 }
