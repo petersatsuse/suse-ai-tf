@@ -225,3 +225,35 @@ resource "null_resource" "download_kubeconfig" {
     command = "scp -o StrictHostKeyChecking=no -i ${path.module}/tf-ssh-private_key ec2-user@${aws_eip.ec2_eip.public_ip}:/tmp/rke2.yaml ./kubeconfig-rke2.yaml"
   }
 }
+
+## Add the namespace for deploying SUSE AI Stack:
+
+resource "kubernetes_namespace" "suse_ai_ns" {
+  metadata {
+    name = var.suse_ai_namespace
+  }
+}
+
+## Add the secret for accessing the application-collection registry:
+
+resource "kubernetes_secret" "suse-appco-registry" {
+  depends_on = [kubernetes_namespace.suse_ai_ns]
+  metadata {
+    name      = var.registry_secretname
+    namespace = var.suse_ai_namespace
+  }
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  data = {
+    ".dockerconfigjson" = jsonencode({
+      auths = {
+        "${var.registry_name}" = {
+          username = var.registry_username,
+          password = var.registry_password,
+          auth     = base64encode("${var.registry_username}:${var.registry_password}")
+        }
+      }
+    })
+  }
+}

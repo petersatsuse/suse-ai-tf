@@ -7,3 +7,6 @@ terraform {
   }
 }
 
+provider "kubernetes" {
+  config_path = "${path.module}/kubeconfig-rke2.yaml"
+}
