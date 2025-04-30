@@ -191,7 +191,7 @@ resource "null_resource" "post_reboot" {
       "sudo systemctl enable --now rke2-server",
       "sudo echo 'Waiting for RKE2-server to be ready...'",
       "while ! sudo systemctl is-active --quiet rke2-server; do echo 'Waiting for RKE2 to be active...'; sleep 10; done",
-      "echo 'RKE2 server is active. Setting KUBECONFIG and applying localpath provisioner.'",
+      "echo 'RKE2 is active and up. Setting KUBECONFIG and applying localpath provisioner.'",
       "sudo sh -c 'export PATH=$PATH:/opt/rke2/bin:/var/lib/rancher/rke2/bin && export KUBECONFIG=/etc/rancher/rke2/rke2.yaml && /var/lib/rancher/rke2/bin/kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.31/deploy/local-path-storage.yaml'"
     ]
 
@@ -226,9 +226,15 @@ resource "null_resource" "download_kubeconfig" {
   }
 }
 
+resource "null_resource" "k8s_cleanup" {
+  depends_on = [aws_eip_association.eip_assoc, null_resource.download_kubeconfig]
+}
+
 ## Add the namespace for deploying SUSE AI Stack:
 
 resource "kubernetes_namespace" "suse_ai_ns" {
+  provider   = kubernetes.k8s
+  depends_on = [aws_eip_association.eip_assoc, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, null_resource.k8s_cleanup]
   metadata {
     name = var.suse_ai_namespace
   }
@@ -237,7 +243,8 @@ resource "kubernetes_namespace" "suse_ai_ns" {
 ## Add the secret for accessing the application-collection registry:
 
 resource "kubernetes_secret" "suse-appco-registry" {
-  depends_on = [kubernetes_namespace.suse_ai_ns]
+  provider   = kubernetes.k8s
+  depends_on = [kubernetes_namespace.suse_ai_ns, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
   metadata {
     name      = var.registry_secretname
     namespace = var.suse_ai_namespace
@@ -262,6 +269,7 @@ resource "kubernetes_secret" "suse-appco-registry" {
 ## Add cert-manager using helm:
 
 resource "helm_release" "cert_manager" {
+  provider   = helm
   name       = "cert-manager"
   namespace  = var.suse_ai_namespace
   repository = "oci://${var.registry_name}/charts"
@@ -269,7 +277,7 @@ resource "helm_release" "cert_manager" {
 
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry]
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
 
   set {
     name  = "crds.enabled"
@@ -281,4 +289,3 @@ resource "helm_release" "cert_manager" {
     value = kubernetes_secret.suse-appco-registry.metadata[0].name
   }
 }
-

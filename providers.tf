@@ -12,6 +12,7 @@ terraform {
 }
 
 provider "kubernetes" {
+  alias       = "k8s"
   config_path = "${path.module}/kubeconfig-rke2.yaml"
 }
 
