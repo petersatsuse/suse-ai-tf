@@ -158,7 +158,8 @@ resource "aws_instance" "sle_micro_6" {
   provisioner "remote-exec" {
     inline = [
       "sudo transactional-update register -r ${var.registration_code}",
-      "sudo transactional-update --continue run zypper install -y curl",
+      "sudo transactional-update --continue run bash -c 'zypper install -y curl && zypper ar https://download.nvidia.com/suse/sle15sp6/ nvidia-sle15sp6-main && zypper --gpg-auto-import-keys refresh && zypper install -y --auto-agree-with-licenses nvidia-open-driver-G06-signed-kmp'",
+      "sudo transactional-update --continue run zypper install -y --auto-agree-with-licenses nvidia-compute-utils-G06=550.100",
       "sudo reboot"
     ]
 
