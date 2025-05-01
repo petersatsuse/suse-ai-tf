@@ -63,3 +63,9 @@ variable "cert_manager_namespace" {
   default     = "cert-manager"
   description = "Name of the namespace where you want to deploy cert-manager"
 }
+
+variable "gpu_operator_ns" {
+  type        = string
+  default     = "nvidia-gpu-operator"
+  description = "Name of the namespace where you want to deploy NVIDIA gpu operator"
+}

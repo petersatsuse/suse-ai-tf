@@ -141,20 +141,6 @@ resource "aws_instance" "sle_micro_6" {
     volume_size = 150 # Specify the desired volume size in GiB
   }
 
-  #  user_data = file("${path.module}/install-rke2server-localpath.sh")
-
-  #  provisioner "file" {
-  #    source = "${path.module}/install-rke2server-localpath.sh"
-  #    destination = "/tmp/install-rke2server-localpath.sh"
-
-  #  connection {
-  #      type        = "ssh"
-  #      user        = "ec2-user"
-  #      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-  #      host        = self.public_ip
-  #    }
-  #  }
-
   provisioner "remote-exec" {
     inline = [
       "sudo transactional-update register -r ${var.registration_code}",
@@ -290,3 +276,22 @@ resource "helm_release" "cert_manager" {
     value = kubernetes_secret.suse-appco-registry.metadata[0].name
   }
 }
+
+## Add NVIDIA-GPU-OPERATOR using helm:
+
+resource "helm_release" "nvidia_gpu_operator" {
+  provider   = helm
+  name       = "nvidia-gpu-operator"
+  namespace  = var.gpu_operator_ns
+  repository = "https://helm.ngc.nvidia.com/nvidia"
+  chart      = "gpu-operator"
+
+  create_namespace = true
+
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
+
+  values = [file("${path.module}/nvidia-gpu-operator-values.yaml")]
+
+}
+
+
