@@ -3,7 +3,7 @@ terraform.tfstate.backup
 terraform.tfvars
 .terraform.lock.hcl
 kubeconfig-rke2.yaml
-.terraform
+.terraform*
 *.pub
 *key
 

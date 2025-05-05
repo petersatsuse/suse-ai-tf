@@ -23,7 +23,7 @@ This Terraform setup will perform the following actions:
 1.  **Launch an EC2 Instance:** Provisions a new EC2 instance in your specified AWS region running the SLE Micro 6.1 AMI.
 2.  **Register the System:** Automatically registers the EC2 instance with your SUSE Customer Center using the provided registration code.
 3.  **Deploy RKE2:** Installs and configures RKE2, a lightweight Kubernetes distribution by Rancher, on the EC2 instance.
-4.  **Deploy NVIDIA GPU Operator:** Installs the NVIDIA GPU Operator within the RKE2 cluster to manage NVIDIA GPU resources (assuming a GPU-enabled EC2 instance type is used).
+4.  **Deploy NVIDIA GPU Operator and Drivers:** Installs the NVIDIA GPU Operator within the RKE2 cluster to manage NVIDIA GPU resources (assuming a GPU-enabled EC2 instance type is used).
 5.  **Deploy SUSE AI Stack:** Deploys the core components of the SUSE AI Stack on the RKE2 cluster:
     * **Milvus:** A cloud-native vector database built for scalable similarity search and AI applications.
     * **Ollama:** A lightweight and extensible framework for running large language models (LLMs) locally.
@@ -33,31 +33,27 @@ This Terraform setup will perform the following actions:
 
 1.  **Clone the Repository:**
     ```bash
-    git clone <repository_url>
-    cd <repository_directory>
+    git clone https://github.com/devenkulkarni/suse-ai-tf.git
+    cd suse-ai-tf
     ```
 
 2.  **Configure Terraform Variables:**
-    Create a `terraform.tfvars` file (or modify the `variables.tf` file) with your specific configuration:
-
-    ```terraform
-    aws_region = "your_aws_region"
-    instance_type = "your_desired_instance_type" # e.g., "t3.medium" or a GPU instance like "g4dn.xlarge"
-    ami = "your_sle_micro_6_1_ami_id" # Find the appropriate SLE Micro 6.1 AMI for your region
-    key_name = "your_ec2_key_pair_name"
-    scc_username = "your_suse_customer_center_username"
-    scc_password = "your_suse_customer_center_password"
-    registration_code = "your_suse_registration_code"
-    admin_password = "your_rke2_server_admin_password" # Choose a strong password for the RKE2 admin user
-    # Optional: Configure observability
-    # observability_registration_code = "your_suse_observability_registration_code"
+    
+    - Copy `./terraform.tfvars.example` to `./terraform.tfvars`
+    - Edit `./terraform.tfvars`
+    - For example:
+    ```bash
+    instance_prefix = "devtesttf"
+    #ssh_public_key  = "~/.ssh/id_ed25519.pub"
+    registration_code   = "<YOUR_REGISTRATION_CODE_HERE>"
+    registry_secretname = "application-collection"
+    registry_username   = "<YOUR_EMAIL_ID_HERE>"
+    registry_password   = "<YOUR_PASSWORD/TOKEN_HERE>"
     ```
-
-    **Note:** It is recommended to use a secure method for managing sensitive information like passwords and registration codes, such as using Terraform Cloud or a secrets manager.
 
 3.  **Initialize Terraform:**
     ```bash
-    terraform init
+    terraform init -upgrade
     ```
 
 4.  **Plan the Deployment:**
@@ -72,6 +68,8 @@ This Terraform setup will perform the following actions:
     ```
     Terraform will now provision the EC2 instance and deploy the SUSE AI Stack. This process may take some time.
 
+    Note: You will need to run terraform apply twice as currently this project is still WIP and currently we haven't modularized the terraform code. So the kubernetes provider is initialized and does not find the kubeconfig file and errors out, re-running terraform apply is a workaround for now.
+
 ## Accessing the Deployed Services
 
 Once the deployment is complete, you can access the deployed services as follows:
@@ -81,12 +79,16 @@ Once the deployment is complete, you can access the deployed services as follows
     ssh -i "path/to/your/private_key.pem" ec2-user@<public_ip_of_your_instance>
     ```
 
-* **Open WebUI:** You can access the Open WebUI interface through your web browser using the public IP address of your EC2 instance on port `8080`.
+* **Add below entry in your system's `/etc/hosts`:**
+    ```bash
+    <PUBLIC_IP_OF_EC2_INSTANCE>  suse-ollama-webui
+    
+* **Open WebUI:** Now you can access the Open WebUI interface through your web browser using the below URL:
     ```
-    http://<public_ip_of_your_instance>:8080
+    https://suse-ollama-webui
     ```
 
-* **Milvus and Ollama:** These services are running as application pods within the RKE2 cluster. You can interact with them using their respective services. Please refer to the documentation for Milvus and Ollama for more details.
+* **Milvus and Ollama:** These services are running as application pods within the RKE2 cluster.
 
 ## Cleaning Up
 

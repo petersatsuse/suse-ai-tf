@@ -105,6 +105,20 @@ resource "aws_security_group" "ssh" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -113,7 +127,7 @@ resource "aws_security_group" "ssh" {
   }
 
   tags = {
-    Name = "ssh-access"
+    Name = "${var.instance_prefix}-sg"
   }
 }
 
@@ -294,4 +308,128 @@ resource "helm_release" "nvidia_gpu_operator" {
 
 }
 
+resource "null_resource" "wait_and_restart_gpu_operator" {
+  depends_on = [helm_release.nvidia_gpu_operator]
 
+  provisioner "remote-exec" {
+    inline = [
+      <<-EOT
+      echo 'Waiting for pods to be ready...'
+      sudo /var/lib/rancher/rke2/bin/kubectl wait --for=condition=Ready pods --all -n nvidia-gpu-operator --timeout=180s || true
+
+      echo 'Checking for pods in CrashLoopBackOff or RunContainerError...'
+      BAD_PODS=$(sudo /var/lib/rancher/rke2/bin/kubectl get pods -n nvidia-gpu-operator -o json | jq -r '.items[] | select(.status.containerStatuses[]?.state.waiting.reason == "RunContainerError" or .status.containerStatuses[]?.state.waiting.reason == "CrashLoopBackOff") | .metadata.name')
+
+      if [ ! -z "$BAD_PODS" ]; then
+        echo 'Restarting unhealthy pods...'
+        for pod in $BAD_PODS; do
+          sudo /var/lib/rancher/rke2/bin/kubectl delete pod $pod -n nvidia-gpu-operator
+        done
+      else
+        echo "All pods look healthy."
+      fi
+      EOT
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+      host        = aws_eip.ec2_eip.public_ip
+    }
+
+  }
+}
+
+## Add label to node for GPU assignment:
+
+resource "null_resource" "label_node" {
+  depends_on = [null_resource.download_kubeconfig]
+
+  provisioner "remote-exec" {
+    inline = [
+      "NODE_NAME=$(sudo /var/lib/rancher/rke2/bin/kubectl get nodes --kubeconfig /etc/rancher/rke2/rke2.yaml -o jsonpath='{.items[0].metadata.name}') && sudo /var/lib/rancher/rke2/bin/kubectl label node $NODE_NAME accelerator=nvidia-gpu --kubeconfig /etc/rancher/rke2/rke2.yaml --overwrite"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+      host        = aws_eip.ec2_eip.public_ip
+    }
+  }
+}
+
+# Patch RKE-Ingress controller to allow hostNetwork so we can access SUSE AI on public IP:
+
+resource "null_resource" "patch_ingress_hostnetwork" {
+  depends_on = [null_resource.download_kubeconfig, null_resource.label_node]
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo /var/lib/rancher/rke2/bin/kubectl get pods -A --kubeconfig /etc/rancher/rke2/rke2.yaml",
+      "sudo /var/lib/rancher/rke2/bin/kubectl patch daemonset --kubeconfig /etc/rancher/rke2/rke2.yaml rke2-ingress-nginx-controller -n kube-system --type='merge' -p '{\"spec\":{\"template\":{\"spec\":{\"hostNetwork\":true}}}}'"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+      host        = aws_eip.ec2_eip.public_ip
+    }
+  }
+}
+
+## Adding SUSE AI Stack
+
+## Adding Milvus using helm:
+
+resource "helm_release" "milvus" {
+  provider         = helm
+  name             = "milvus"
+  namespace        = var.suse_ai_namespace
+  repository       = "oci://${var.registry_name}/charts"
+  chart            = "milvus"
+  version          = "4.2.2"
+  create_namespace = true
+
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
+
+  values = [file("${path.module}/milvus-overrides.yaml")]
+
+}
+
+
+## Adding Ollama using helm:
+
+resource "helm_release" "ollama" {
+  provider         = helm
+  name             = "ollama"
+  namespace        = var.suse_ai_namespace
+  repository       = "oci://${var.registry_name}/charts"
+  chart            = "ollama"
+  create_namespace = true
+  timeout          = 900
+
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus]
+
+  values = [file("${path.module}/ollama-overrides.yaml")]
+
+}
+
+## Adding Open-WebUI using helm:
+
+resource "helm_release" "open_webui" {
+  provider         = helm
+  name             = "open-webui"
+  namespace        = var.suse_ai_namespace
+  repository       = "oci://${var.registry_name}/charts"
+  chart            = "open-webui"
+  version          = "3.3.2"
+  create_namespace = true
+
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus, helm_release.ollama]
+
+  values = [file("${path.module}/openwebui-overrides.yaml")]
+
+}
