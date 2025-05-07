@@ -20,7 +20,7 @@ registration_code = null
 registry_name = "dp.apps.rancher.io"
 
 # [Required] Specify the secretname that contains sensitive information for accessing image registry: 
-registry_secretname = "application-collection-secret"
+registry_secretname = "application-collection"
 
 # [Required] Specify the username for the image registry
 registry_username = null

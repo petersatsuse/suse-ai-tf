@@ -15,6 +15,15 @@ Before you begin, ensure you have the following:
 * **SUSE Registration Code:** A valid and active registration code for registering the SLE Micro 6.1 instance obtained from the SUSE Customer Center.
 * **AWS Credentials:** Your AWS credentials configured for Terraform to use. This can be done through environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`) or an AWS CLI configuration profile.
 * **SSH Key Pair:** *(Optional)* An existing EC2 key pair in your desired AWS region to allow SSH access to the deployed instance.
+* **Rancher Application Registry:** If you have access to the SUSE customer Center (SCC) you should have access to [Rancher application collection](https://apps.rancher.io/). Login to the Rancher application collection and click on the top right corner at the gravatar/profile icon, then click on `Settings` and then click on `Access Token`. Here you will see a option to `Create` tokens. After clicking `Create` you should see tokens created for helm, docker, kubernetes and curl.
+
+For example,
+```bash
+docker login <registry_name> -u <registry_username> -p <password/token>
+helm registry login <registry_name> -u <registry_username> -p <password/token>
+kubectl create secret docker-registry <secret_name> --docker-server=<registry_name> --docker-username=<registry_username> --docker-password=<registry_password>
+curl -u <registry_username>:<registry_password> https://api.<registry_name>/v1/applications
+```
 
 ## Overview
 
@@ -27,7 +36,7 @@ This Terraform setup will perform the following actions:
 5.  **Deploy SUSE AI Stack:** Deploys the core components of the SUSE AI Stack on the RKE2 cluster:
     * **Milvus:** A cloud-native vector database built for scalable similarity search and AI applications.
     * **Ollama:** A lightweight and extensible framework for running large language models (LLMs) locally.
-    * **Open WebUI (formerly Chatbox):** A user-friendly web interface for interacting with LLMs served by Ollama.
+    * **Open WebUI:** A user-friendly web interface for interacting with LLMs served by Ollama.
 
 ## Getting Started
 
@@ -43,8 +52,7 @@ This Terraform setup will perform the following actions:
     - Edit `./terraform.tfvars`
     - For example:
     ```bash
-    instance_prefix = "devtesttf"
-    #ssh_public_key  = "~/.ssh/id_ed25519.pub"
+    instance_prefix = "myprefix"
     registration_code   = "<YOUR_REGISTRATION_CODE_HERE>"
     registry_secretname = "application-collection"
     registry_username   = "<YOUR_EMAIL_ID_HERE>"
