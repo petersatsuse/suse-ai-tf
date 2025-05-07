@@ -228,15 +228,15 @@ resource "null_resource" "download_kubeconfig" {
   }
 }
 
-resource "null_resource" "k8s_cleanup" {
-  depends_on = [aws_eip_association.eip_assoc, null_resource.download_kubeconfig]
-}
+#resource "null_resource" "k8s_cleanup" {
+#  depends_on = [aws_eip_association.eip_assoc, null_resource.download_kubeconfig]
+#}
 
 ## Add the namespace for deploying SUSE AI Stack:
 
 resource "kubernetes_namespace" "suse_ai_ns" {
   provider   = kubernetes.k8s
-  depends_on = [aws_eip_association.eip_assoc, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, null_resource.k8s_cleanup]
+  depends_on = [null_resource.download_kubeconfig, aws_eip_association.eip_assoc, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc]
   metadata {
     name = var.suse_ai_namespace
   }
@@ -246,7 +246,7 @@ resource "kubernetes_namespace" "suse_ai_ns" {
 
 resource "kubernetes_secret" "suse-appco-registry" {
   provider   = kubernetes.k8s
-  depends_on = [kubernetes_namespace.suse_ai_ns, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
+  depends_on = [null_resource.download_kubeconfig, kubernetes_namespace.suse_ai_ns, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc]
   metadata {
     name      = var.registry_secretname
     namespace = var.suse_ai_namespace
@@ -279,7 +279,7 @@ resource "helm_release" "cert_manager" {
 
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.nvidia_gpu_operator]
+  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.nvidia_gpu_operator]
 
   set {
     name  = "crds.enabled"
@@ -303,7 +303,7 @@ resource "helm_release" "nvidia_gpu_operator" {
 
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
+  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc]
 
   values = [file("${path.module}/nvidia-gpu-operator-values.yaml")]
 
@@ -363,7 +363,7 @@ resource "helm_release" "milvus" {
   version          = "4.2.2"
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.nvidia_gpu_operator]
+  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/milvus-overrides.yaml")]
 
@@ -381,7 +381,7 @@ resource "helm_release" "ollama" {
   create_namespace = true
   timeout          = 900
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus, helm_release.nvidia_gpu_operator]
+  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.milvus, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/ollama-overrides.yaml")]
 
@@ -398,7 +398,7 @@ resource "helm_release" "open_webui" {
   version          = "3.3.2"
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus, helm_release.ollama, helm_release.nvidia_gpu_operator]
+  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.milvus, helm_release.ollama, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/openwebui-overrides.yaml")]
 

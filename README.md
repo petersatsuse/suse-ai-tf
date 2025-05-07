@@ -64,7 +64,7 @@ This Terraform setup will perform the following actions:
 
 5.  **Apply the Configuration:**
     ```bash
-    terraform apply -auto-approve
+    terraform apply -auto-approve && terraform apply -auto-approve
     ```
     Terraform will now provision the EC2 instance and deploy the SUSE AI Stack. This process may take some time.
 
