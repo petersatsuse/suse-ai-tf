@@ -158,8 +158,9 @@ resource "aws_instance" "sle_micro_6" {
   provisioner "remote-exec" {
     inline = [
       "sudo transactional-update register -r ${var.registration_code}",
-      "sudo transactional-update --continue run bash -c 'zypper install -y curl && zypper ar https://download.nvidia.com/suse/sle15sp6/ nvidia-sle15sp6-main && zypper --gpg-auto-import-keys refresh && zypper install -y --auto-agree-with-licenses nvidia-open-driver-G06-signed-kmp'",
+      "sudo transactional-update --continue run bash -c 'zypper install -y curl && zypper install -y jq && zypper ar https://download.nvidia.com/suse/sle15sp6/ nvidia-sle15sp6-main && zypper --gpg-auto-import-keys refresh && zypper install -y --auto-agree-with-licenses nvidia-open-driver-G06-signed-kmp'",
       "sudo transactional-update --continue run zypper install -y --auto-agree-with-licenses nvidia-compute-utils-G06=550.100",
+      "sudo transactional-update --continue run bash -c 'echo KUBECONFIG=/etc/rancher/rke2/rke2.yaml >> /etc/profile && echo PATH=$PATH:/var/lib/rancher/rke2/bin:/usr/local/nvidia/toolkit >> /etc/profile'",
       "sudo reboot"
     ]
 
@@ -278,7 +279,7 @@ resource "helm_release" "cert_manager" {
 
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.nvidia_gpu_operator]
 
   set {
     name  = "crds.enabled"
@@ -308,39 +309,6 @@ resource "helm_release" "nvidia_gpu_operator" {
 
 }
 
-resource "null_resource" "wait_and_restart_gpu_operator" {
-  depends_on = [helm_release.nvidia_gpu_operator]
-
-  provisioner "remote-exec" {
-    inline = [
-      <<-EOT
-      echo 'Waiting for pods to be ready...'
-      sudo /var/lib/rancher/rke2/bin/kubectl wait --for=condition=Ready pods --all -n nvidia-gpu-operator --timeout=180s || true
-
-      echo 'Checking for pods in CrashLoopBackOff or RunContainerError...'
-      BAD_PODS=$(sudo /var/lib/rancher/rke2/bin/kubectl get pods -n nvidia-gpu-operator -o json | jq -r '.items[] | select(.status.containerStatuses[]?.state.waiting.reason == "RunContainerError" or .status.containerStatuses[]?.state.waiting.reason == "CrashLoopBackOff") | .metadata.name')
-
-      if [ ! -z "$BAD_PODS" ]; then
-        echo 'Restarting unhealthy pods...'
-        for pod in $BAD_PODS; do
-          sudo /var/lib/rancher/rke2/bin/kubectl delete pod $pod -n nvidia-gpu-operator
-        done
-      else
-        echo "All pods look healthy."
-      fi
-      EOT
-    ]
-
-    connection {
-      type        = "ssh"
-      user        = "ec2-user"
-      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-      host        = aws_eip.ec2_eip.public_ip
-    }
-
-  }
-}
-
 ## Add label to node for GPU assignment:
 
 resource "null_resource" "label_node" {
@@ -368,6 +336,8 @@ resource "null_resource" "patch_ingress_hostnetwork" {
   provisioner "remote-exec" {
     inline = [
       "sudo /var/lib/rancher/rke2/bin/kubectl get pods -A --kubeconfig /etc/rancher/rke2/rke2.yaml",
+      "sudo sleep 90",
+      "sudo /var/lib/rancher/rke2/bin/kubectl get pods -A --kubeconfig /etc/rancher/rke2/rke2.yaml",
       "sudo /var/lib/rancher/rke2/bin/kubectl patch daemonset --kubeconfig /etc/rancher/rke2/rke2.yaml rke2-ingress-nginx-controller -n kube-system --type='merge' -p '{\"spec\":{\"template\":{\"spec\":{\"hostNetwork\":true}}}}'"
     ]
 
@@ -393,7 +363,7 @@ resource "helm_release" "milvus" {
   version          = "4.2.2"
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup]
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/milvus-overrides.yaml")]
 
@@ -411,7 +381,7 @@ resource "helm_release" "ollama" {
   create_namespace = true
   timeout          = 900
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus]
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/ollama-overrides.yaml")]
 
@@ -428,7 +398,7 @@ resource "helm_release" "open_webui" {
   version          = "3.3.2"
   create_namespace = true
 
-  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus, helm_release.ollama]
+  depends_on = [kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, null_resource.k8s_cleanup, helm_release.milvus, helm_release.ollama, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/openwebui-overrides.yaml")]
 
