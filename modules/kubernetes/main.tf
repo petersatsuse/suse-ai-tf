@@ -1,18 +1,14 @@
 ## Add the namespace for deploying SUSE AI Stack:
-
 resource "kubernetes_namespace" "suse_ai_ns" {
-  provider   = kubernetes.k8s
-  depends_on = [null_resource.download_kubeconfig, aws_eip_association.eip_assoc, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc]
+  depends_on = [null_resource.validate_kubernetes_connection]
   metadata {
     name = var.suse_ai_namespace
   }
 }
 
 ## Add the secret for accessing the application-collection registry:
-
 resource "kubernetes_secret" "suse-appco-registry" {
-  provider   = kubernetes.k8s
-  depends_on = [null_resource.download_kubeconfig, kubernetes_namespace.suse_ai_ns, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc]
+  depends_on = [kubernetes_namespace.suse_ai_ns]
   metadata {
     name      = var.registry_secretname
     namespace = var.suse_ai_namespace
@@ -33,19 +29,28 @@ resource "kubernetes_secret" "suse-appco-registry" {
   }
 }
 
+## Add NVIDIA-GPU-OPERATOR using helm:
+resource "helm_release" "nvidia_gpu_operator" {
+  name       = "nvidia-gpu-operator"
+  namespace  = var.gpu_operator_ns
+  repository = "https://helm.ngc.nvidia.com/nvidia"
+  chart      = "gpu-operator"
+
+  create_namespace = true
+  depends_on       = [null_resource.validate_kubernetes_connection]
+
+  values = [file("${path.module}/nvidia-gpu-operator-values.yaml")]
+}
 
 ## Add cert-manager using helm:
-
 resource "helm_release" "cert_manager" {
-  provider   = helm
   name       = "cert-manager"
   namespace  = var.suse_ai_namespace
   repository = "oci://${var.registry_name}/charts"
   chart      = "cert-manager"
 
   create_namespace = true
-
-  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.nvidia_gpu_operator]
+  depends_on       = [kubernetes_secret.suse-appco-registry, helm_release.nvidia_gpu_operator]
 
   set {
     name  = "crds.enabled"
@@ -58,27 +63,9 @@ resource "helm_release" "cert_manager" {
   }
 }
 
-## Add NVIDIA-GPU-OPERATOR using helm:
-
-resource "helm_release" "nvidia_gpu_operator" {
-  provider   = helm
-  name       = "nvidia-gpu-operator"
-  namespace  = var.gpu_operator_ns
-  repository = "https://helm.ngc.nvidia.com/nvidia"
-  chart      = "gpu-operator"
-
-  create_namespace = true
-
-  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc]
-
-  values = [file("${path.module}/nvidia-gpu-operator-values.yaml")]
-
-}
-
 ## Add label to node for GPU assignment:
-
 resource "null_resource" "label_node" {
-  depends_on = [null_resource.download_kubeconfig]
+  depends_on = [null_resource.validate_kubernetes_connection]
 
   provisioner "remote-exec" {
     inline = [
@@ -88,16 +75,15 @@ resource "null_resource" "label_node" {
     connection {
       type        = "ssh"
       user        = "ec2-user"
-      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-      host        = aws_eip.ec2_eip.public_ip
+      private_key = var.ssh_private_key_content
+      host        = var.ec2_public_ip
     }
   }
 }
 
 # Patch RKE-Ingress controller to allow hostNetwork so we can access SUSE AI on public IP:
-
 resource "null_resource" "patch_ingress_hostnetwork" {
-  depends_on = [null_resource.download_kubeconfig, null_resource.label_node]
+  depends_on = [null_resource.label_node]
 
   provisioner "remote-exec" {
     inline = [
@@ -110,62 +96,47 @@ resource "null_resource" "patch_ingress_hostnetwork" {
     connection {
       type        = "ssh"
       user        = "ec2-user"
-      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-      host        = aws_eip.ec2_eip.public_ip
+      private_key = var.ssh_private_key_content
+      host        = var.ec2_public_ip
     }
   }
 }
 
-## Adding SUSE AI Stack
-
 ## Adding Milvus using helm:
-
 resource "helm_release" "milvus" {
-  provider         = helm
   name             = "milvus"
   namespace        = var.suse_ai_namespace
   repository       = "oci://${var.registry_name}/charts"
   chart            = "milvus"
   version          = "4.2.2"
   create_namespace = true
-
-  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.nvidia_gpu_operator]
+  depends_on       = [kubernetes_secret.suse-appco-registry, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/milvus-overrides.yaml")]
-
 }
 
-
 ## Adding Ollama using helm:
-
 resource "helm_release" "ollama" {
-  provider         = helm
   name             = "ollama"
   namespace        = var.suse_ai_namespace
   repository       = "oci://${var.registry_name}/charts"
   chart            = "ollama"
   create_namespace = true
   timeout          = 900
-
-  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.milvus, helm_release.nvidia_gpu_operator]
+  depends_on       = [helm_release.milvus, helm_release.nvidia_gpu_operator]
 
   values = [file("${path.module}/ollama-overrides.yaml")]
-
 }
 
 ## Adding Open-WebUI using helm:
-
 resource "helm_release" "open_webui" {
-  provider         = helm
   name             = "open-webui"
   namespace        = var.suse_ai_namespace
   repository       = "oci://${var.registry_name}/charts"
   chart            = "open-webui"
   version          = "3.3.2"
   create_namespace = true
-
-  depends_on = [null_resource.download_kubeconfig, kubernetes_secret.suse-appco-registry, aws_internet_gateway.igw, aws_route_table.test_rt, aws_route_table_association.public_assoc, aws_vpc.test_vpc, aws_eip_association.eip_assoc, helm_release.milvus, helm_release.ollama, helm_release.nvidia_gpu_operator]
+  depends_on       = [helm_release.milvus, helm_release.ollama]
 
   values = [file("${path.module}/openwebui-overrides.yaml")]
-
 }

@@ -26,7 +26,6 @@ resource "aws_key_pair" "deployer" {
   public_key = var.use_existing_ssh_public_key ? data.local_file.ssh_public_key[0].content : tls_private_key.ssh_keypair[0].public_key_openssh
 }
 
-
 # VPC
 resource "aws_vpc" "test_vpc" {
   cidr_block           = "10.0.0.0/16"
@@ -217,6 +216,35 @@ resource "null_resource" "download_kubeconfig" {
   }
 
   provisioner "local-exec" {
-    command = "scp -o StrictHostKeyChecking=no -i ${path.module}/tf-ssh-private_key ec2-user@${aws_eip.ec2_eip.public_ip}:/tmp/rke2.yaml ./kubeconfig-rke2.yaml"
+    command = "scp -o StrictHostKeyChecking=no -i ${path.module}/tf-ssh-private_key ec2-user@${aws_eip.ec2_eip.public_ip}:/tmp/rke2.yaml ${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
+  }
+}
+
+# Add a validation step to ensure the kubeconfig is ready
+resource "null_resource" "kubernetes_api_ready" {
+  depends_on = [null_resource.download_kubeconfig]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      # Wait for the kubeconfig file to exist
+      while [ ! -f "${path.module}/kubeconfig-rke2.yaml" ]; do
+        echo "Waiting for kubeconfig file to be created..."
+        sleep 5
+      done
+      
+      # Try to reach the Kubernetes API
+      MAX_RETRIES=30
+      RETRY=0
+      until kubectl --kubeconfig=${path.module}/kubeconfig-rke2.yaml cluster-info; do
+        RETRY=$((RETRY+1))
+        if [ $RETRY -eq $MAX_RETRIES ]; then
+          echo "Failed to connect to Kubernetes API after $MAX_RETRIES attempts"
+          exit 1
+        fi
+        echo "Waiting for Kubernetes API to become available... (attempt $RETRY/$MAX_RETRIES)"
+        sleep 10
+      done
+      echo "Kubernetes API is ready"
+    EOT
   }
 }
