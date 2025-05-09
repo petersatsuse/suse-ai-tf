@@ -1,6 +1,6 @@
 variable "instance_prefix" {
   type    = string
-  default = null
+  default = "suse-ai"
 }
 
 variable "instance_type" {
@@ -24,8 +24,8 @@ variable "user_ssh_public_key" {
 }
 
 variable "registration_code" {
-  type    = string
-  default = null
+  type        = string
+  description = "SUSE registration code"
 }
 
 variable "registry_name" {
@@ -42,14 +42,13 @@ variable "registry_secretname" {
 
 variable "registry_username" {
   type        = string
-  default     = null
   description = "Username for the registry"
 }
 
 variable "registry_password" {
   type        = string
-  default     = null
   description = "Password/Token for the registry"
+  sensitive   = true
 }
 
 variable "suse_ai_namespace" {
@@ -66,6 +65,6 @@ variable "cert_manager_namespace" {
 
 variable "gpu_operator_ns" {
   type        = string
-  default     = "nvidia-gpu-operator"
-  description = "Name of the namespace where you want to deploy NVIDIA gpu operator"
+  default     = "gpu-operator-resources"
+  description = "Namespace for the NVIDIA GPU operator"
 }
