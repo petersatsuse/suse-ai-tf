@@ -198,31 +198,53 @@ resource "null_resource" "post_reboot" {
   }
 }
 
-resource "null_resource" "download_kubeconfig" {
-  depends_on = [null_resource.post_reboot]
-  provisioner "remote-exec" {
-    inline = [
-      "sudo cp /etc/rancher/rke2/rke2.yaml /tmp/rke2.yaml",
-      "sudo chown ec2-user:ec2-user /tmp/rke2.yaml",
-      "sudo sed -i 's/127.0.0.1/${aws_eip.ec2_eip.public_ip}/g' /tmp/rke2.yaml"
-    ]
+#resource "null_resource" "download_kubeconfig" {
+#  depends_on = [null_resource.post_reboot]
+#  provisioner "remote-exec" {
+#    inline = [
+#      "sudo cp /etc/rancher/rke2/rke2.yaml /tmp/rke2.yaml",
+#      "sudo chown ec2-user:ec2-user /tmp/rke2.yaml",
+#      "sudo sed -i 's/127.0.0.1/${aws_eip.ec2_eip.public_ip}/g' /tmp/rke2.yaml"
+#    ]
+#
+#    connection {
+#      type        = "ssh"
+#      user        = "ec2-user"
+#      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+#      host        = aws_eip.ec2_eip.public_ip
+#    }
+#  }
+#
+#  provisioner "local-exec" {
+#    command = "scp -o StrictHostKeyChecking=no -i ${path.module}/tf-ssh-private_key ec2-user@${aws_eip.ec2_eip.public_ip}:/tmp/rke2.yaml ${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
+#  }
+#}
 
-    connection {
-      type        = "ssh"
-      user        = "ec2-user"
-      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-      host        = aws_eip.ec2_eip.public_ip
-    }
-  }
 
-  provisioner "local-exec" {
-    command = "scp -o StrictHostKeyChecking=no -i ${path.module}/tf-ssh-private_key ec2-user@${aws_eip.ec2_eip.public_ip}:/tmp/rke2.yaml ${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
-  }
+resource "ssh_resource" "retrieve_kubeconfig" {
+  host = aws_eip.ec2_eip.public_ip
+  commands = [
+    "sudo sudo sed 's/127.0.0.1/${aws_eip.ec2_eip.public_ip}/g' /etc/rancher/rke2/rke2.yaml"
+  ]
+  user        = "ec2-user"
+  private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+}
+
+resource "local_file" "kube_config_yaml" {
+  filename        = "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
+  content         = ssh_resource.retrieve_kubeconfig.result
+  file_permission = "0600"
+}
+
+resource "local_file" "kube_config_yaml_backup" {
+  filename        = "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml.backup"
+  content         = ssh_resource.retrieve_kubeconfig.result
+  file_permission = "0600"
 }
 
 # Add a validation step to ensure the kubeconfig is ready
 resource "null_resource" "kubernetes_api_ready" {
-  depends_on = [null_resource.download_kubeconfig]
+  depends_on = [local_file.kube_config_yaml]
 
   provisioner "local-exec" {
     command = <<-EOT

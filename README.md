@@ -72,11 +72,17 @@ This Terraform setup will perform the following actions:
 
 5.  **Apply the Configuration:**
     ```bash
-    terraform apply -auto-approve && terraform apply -auto-approve
+    terraform apply -auto-approve 
     ```
-    Terraform will now provision the EC2 instance and deploy the SUSE AI Stack. This process may take some time.
 
-    Note: You will need to run terraform apply twice as currently this project is still WIP and currently we haven't modularized the terraform code. So the kubernetes provider is initialized and does not find the kubeconfig file and errors out, re-running terraform apply is a workaround for now.
+    Note: You will need to run terraform apply twice as currently this project is still WIP. As of now the kubernetes provider is initialized  at the start itself and does not find the kubeconfig file and errors out, re-running terraform apply is a workaround for now. 
+
+
+    ```bash
+    terraform apply -auto-approve
+    ```
+
+    Terraform will now provision the EC2 instance and deploy the SUSE AI Stack. This process may take some time.
 
 ## Accessing the Deployed Services
 

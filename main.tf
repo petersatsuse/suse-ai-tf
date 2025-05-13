@@ -3,29 +3,34 @@ provider "aws" {
   region = "ap-south-1" # Adjust to your region
 }
 
-provider "kubernetes" {
-  config_path = fileexists("${path.root}/modules/infrastructure/kubeconfig-rke2.yaml") ? "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml" : ""
-  alias       = "k8s"
 
+locals {
+  kubeconfig_exists = fileexists("${path.root}/modules/infrastructure/kubeconfig-rke2.yaml")
+}
+
+
+provider "kubernetes" {
+  alias       = "k8s"
+  config_path = local.kubeconfig_exists ? var.kubeconfig_path : null
   # Add these to avoid API server connection attempts when file doesn't exist
-  host = ""
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "true" # Command that always succeeds but does nothing
-    args        = []
-  }
+  #  host = ""
+  #  exec {
+  #    api_version = "client.authentication.k8s.io/v1beta1"
+  #    command     = "true" # Command that always succeeds but does nothing
+  #    args        = []
+  #  }
 }
 
 provider "helm" {
   kubernetes {
-    config_path = fileexists("${path.root}/modules/infrastructure/kubeconfig-rke2.yaml") ? "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml" : ""
+    config_path = local.kubeconfig_exists ? var.kubeconfig_path : null
     # Add these to avoid API server connection attempts when file doesn't exist
-    host = ""
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "true" # Command that always succeeds but does nothing
-      args        = []
-    }
+    #    host = ""
+    #    exec {
+    #      api_version = "client.authentication.k8s.io/v1beta1"
+    #      command     = "true" # Command that always succeeds but does nothing
+    #      args        = []
+    #    }
   }
 
   registry {
@@ -56,6 +61,18 @@ resource "local_file" "kubeconfig_ready_signal" {
   depends_on = [module.rke2_node]
 }
 
+resource "null_resource" "wait_for_kubeconfig" {
+  triggers = {
+    kubeconfig_ready = timestamp() # Force re-evaluation
+  }
+
+  provisioner "local-exec" {
+    command = "while [ ! -f ${path.root}/modules/infrastructure/kubeconfig-rke2.yaml ]; do sleep 5; done"
+  }
+
+  depends_on = [module.rke2_node]
+}
+
 # Kubernetes module
 module "k8s_resources" {
   source = "./modules/kubernetes"
@@ -77,4 +94,6 @@ module "k8s_resources" {
   suse_ai_namespace      = var.suse_ai_namespace
   cert_manager_namespace = var.cert_manager_namespace
   gpu_operator_ns        = var.gpu_operator_ns
+
+  depends_on = [null_resource.wait_for_kubeconfig]
 }

@@ -51,6 +51,12 @@ variable "registry_password" {
   sensitive   = true
 }
 
+variable "kubeconfig_path" {
+  type        = string
+  description = "kubeconfig file for accessing cluster"
+  default     = "./modules/infrastructure/kubeconfig-rke2.yaml"
+}
+
 variable "suse_ai_namespace" {
   type        = string
   default     = "suse-ai"

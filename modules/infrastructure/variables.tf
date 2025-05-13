@@ -27,3 +27,4 @@ variable "registration_code" {
   type    = string
   default = null
 }
+
