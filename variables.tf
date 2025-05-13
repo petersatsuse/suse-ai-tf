@@ -3,6 +3,11 @@ variable "instance_prefix" {
   default = "suse-ai"
 }
 
+variable "aws_region" {
+  type    = string
+  default = "eu-central-1"
+}
+
 variable "instance_type" {
   type    = string
   default = "g4dn.xlarge"
@@ -54,7 +59,7 @@ variable "registry_password" {
 variable "kubeconfig_path" {
   type        = string
   description = "kubeconfig file for accessing cluster"
-  default     = "./modules/infrastructure/kubeconfig-rke2.yaml"
+  default     = null
 }
 
 variable "suse_ai_namespace" {

@@ -3,6 +3,11 @@ variable "instance_prefix" {
   default = null
 }
 
+variable "aws_region" {
+  type    = string
+  default = "eu-central-1"
+}
+
 variable "instance_type" {
   type    = string
   default = "g4dn.xlarge"
