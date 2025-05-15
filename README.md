@@ -1,6 +1,6 @@
 # Deploying SUSE AI Stack on AWS EC2 with Terraform
 
-This project provides Terraform configurations to automate the deployment of the SUSE AI Stack on an Amazon Web Services (AWS) EC2 instance running SUSE Linux Enterprise Micro 6.1.
+This project provides Terraform configurations to automate the deployment of the SUSE AI Stack on an Amazon Web Services (AWS) EC2 instance (default -> g4dn.xlarge for GPU) running SUSE Linux Enterprise Micro 6.1.
 
 ## Prerequisites
 
@@ -19,17 +19,17 @@ Before you begin, ensure you have the following:
 
 For example,
 ```bash
-docker login <registry_name> -u <registry_username> -p <password/token>
-helm registry login <registry_name> -u <registry_username> -p <password/token>
-kubectl create secret docker-registry <secret_name> --docker-server=<registry_name> --docker-username=<registry_username> --docker-password=<registry_password>
-curl -u <registry_username>:<registry_password> https://api.<registry_name>/v1/applications
+# docker login <registry_name> -u <registry_username> -p <password/token>
+# helm registry login <registry_name> -u <registry_username> -p <password/token>
+# kubectl create secret docker-registry <secret_name> --docker-server=<registry_name> --docker-username=<registry_username> --docker-password=<registry_password>
+# curl -u <registry_username>:<registry_password> https://api.<registry_name>/v1/applications
 ```
 
 ## Overview
 
 This Terraform setup will perform the following actions:
 
-1.  **Launch an EC2 Instance:** Provisions a new EC2 instance in your specified AWS region running the SLE Micro 6.1 AMI.
+1.  **Launch an EC2 Instance:** Provisions a new EC2 instance of type g4dn.xlarge in your specified AWS region running the SLE Micro 6.1 AMI.
 2.  **Register the System:** Automatically registers the EC2 instance with your SUSE Customer Center using the provided registration code.
 3.  **Deploy RKE2:** Installs and configures RKE2, a lightweight Kubernetes distribution by Rancher, on the EC2 instance.
 4.  **Deploy NVIDIA GPU Operator and Drivers:** Installs the NVIDIA GPU Operator within the RKE2 cluster to manage NVIDIA GPU resources (assuming a GPU-enabled EC2 instance type is used).
@@ -74,14 +74,6 @@ This Terraform setup will perform the following actions:
     ```bash
     terraform apply -auto-approve 
     ```
-
-    Note: You will need to run terraform apply twice as currently this project is still WIP. As of now the kubernetes provider is initialized  at the start itself and does not find the kubeconfig file and errors out, re-running terraform apply is a workaround for now. 
-
-
-    ```bash
-    terraform apply -auto-approve
-    ```
-
     Terraform will now provision the EC2 instance and deploy the SUSE AI Stack. This process may take some time.
 
 ## Accessing the Deployed Services
