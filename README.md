@@ -12,7 +12,7 @@ Before you begin, ensure you have the following:
     * Rancher Prime
     * SUSE AI
     * *(Optional)* SUSE Observability
-* **SUSE Registration Code:** A valid and active registration code for registering the SLE Micro 6.1 instance obtained from the SUSE Customer Center.
+* **SUSE Registration Code:** A valid and active registration code for registering the SLE Micro 6.1 instance obtained from the [SUSE Customer Center](https://scc.suse.com/). Find for 'SUSE Linux Micro', select the version either 6.1 or 6.2, then go to 'Employee Subscription' and click on 'Generate registration code'. After the registration code is generated, activate it.
 * **AWS Credentials:** Your AWS credentials configured for Terraform to use. This can be done through environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`) or an AWS CLI configuration profile.
 * **SSH Key Pair:** *(Optional)* An existing EC2 key pair in your desired AWS region to allow SSH access to the deployed instance.
 * **Rancher Application Registry:** If you have access to the SUSE customer Center (SCC) you should have access to [Rancher application collection](https://apps.rancher.io/). Login to the Rancher application collection and click on the top right corner at the gravatar/profile icon, then click on `Settings` and then click on `Access Token`. Here you will see a option to `Create` tokens. After clicking `Create` you should see tokens created for helm, docker, kubernetes and curl.
