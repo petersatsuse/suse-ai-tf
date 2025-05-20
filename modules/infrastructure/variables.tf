@@ -6,7 +6,6 @@ variable "instance_prefix" {
 
 variable "aws_region" {
   type        = string
-  default     = "ap-south-1"
   description = "Specifies the AWS region to deploy all resources"
 }
 

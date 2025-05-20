@@ -8,3 +8,7 @@ data "aws_ami" "suse_sle_micro6" {
     values = ["suse-sle-micro-6-1-byos-v20250210-hvm-ssd-x86_64"]
   }
 }
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}

@@ -5,6 +5,7 @@ locals {
 # Infrastructure module
 module "rke2_node" {
   source                      = "./modules/infrastructure/"
+  aws_region                  = var.aws_region
   instance_prefix             = var.instance_prefix
   instance_type               = var.instance_type
   use_existing_ssh_public_key = var.use_existing_ssh_public_key
