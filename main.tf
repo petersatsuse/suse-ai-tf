@@ -28,6 +28,7 @@ module "cloud" {
   # Azure
   image                = var.azure_image
   user_ssh_public_key  = var.user_ssh_public_key
+  resource_group_name_prefix = var.azure_rg_prefix
 }
 
 # Create a local file signal to indicate when infrastructure is ready
