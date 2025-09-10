@@ -15,6 +15,11 @@ variable "instance_type" {
   description = "Type of EC2 instance"
 }
 
+variable "ssh_user" {
+  type        = string
+  description = "The SSH user for the created VM."
+}
+
 variable "use_existing_ssh_public_key" {
   type        = bool
   default     = false
@@ -38,4 +43,3 @@ variable "registration_code" {
   default     = null
   description = "SUSE registration code"
 }
-
