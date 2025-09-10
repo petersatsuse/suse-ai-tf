@@ -147,126 +147,133 @@ resource "aws_instance" "sle_micro_6" {
     volume_size = 150 # Specify the desired volume size in GiB
   }
 
-  provisioner "remote-exec" {
-    inline = [
-      "sudo transactional-update register -r ${var.registration_code}",
-      "sudo transactional-update --continue run bash -c 'zypper install -y curl && zypper install -y jq && zypper ar https://download.nvidia.com/suse/sle15sp6/ nvidia-sle15sp6-main && zypper --gpg-auto-import-keys refresh && zypper install -y --auto-agree-with-licenses nvidia-open-driver-G06-signed-kmp'",
-      "sudo transactional-update --continue run zypper install -y --auto-agree-with-licenses nvidia-compute-utils-G06=550.100",
-      "sudo transactional-update --continue run bash -c 'echo KUBECONFIG=/etc/rancher/rke2/rke2.yaml >> /etc/profile && echo PATH=$PATH:/var/lib/rancher/rke2/bin:/usr/local/nvidia/toolkit >> /etc/profile'",
-      "sudo reboot"
-    ]
-
-    connection {
-      type        = "ssh"
-      user        = "ec2-user"
-      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-      host        = self.public_ip
-    }
-  }
-}
-
 resource "aws_eip_association" "eip_assoc" {
   instance_id   = aws_instance.sle_micro_6.id
   allocation_id = aws_eip.ec2_eip.id
 }
 
-resource "null_resource" "post_reboot" {
-  depends_on = [aws_instance.sle_micro_6]
+
+# --- OS Update and Reboot Trigger ---
+resource "null_resource" "post_reboot_update" {
+  depends_on = [azurerm_linux_virtual_machine.sle_micro_6]
+
+  triggers = {
+    vm_id = azurerm_linux_virtual_machine.sle_micro_6.id
+  }
+
+  connection {
+    type        = "ssh"
+    user        = var.ssh_user
+    private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+    host        = azurerm_public_ip.test_public_ip.ip_address
+  }
 
   provisioner "remote-exec" {
     inline = [
-      "echo 'Reconnected after reboot'",
-      "echo 'Creating the RKE2 config file...'",
-      "sudo mkdir -p /etc/rancher/rke2/ && sudo tee /etc/rancher/rke2/config.yaml > /dev/null <<EOF",
-      "tls-san:",
-      "  - ${aws_eip.ec2_eip.public_ip}",
-      "EOF",
-      "sudo curl -sfL https://get.rke2.io |sudo sh -",
-      "sudo systemctl enable --now rke2-server",
-      "sudo echo 'Waiting for RKE2-server to be ready...'",
-      "while ! sudo systemctl is-active --quiet rke2-server; do echo 'Waiting for RKE2 to be active...'; sleep 10; done",
-      "echo 'RKE2 is active and up. Setting KUBECONFIG and applying localpath provisioner.'",
-      "sudo sh -c 'export PATH=$PATH:/opt/rke2/bin:/var/lib/rancher/rke2/bin && export KUBECONFIG=/etc/rancher/rke2/rke2.yaml && /var/lib/rancher/rke2/bin/kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.31/deploy/local-path-storage.yaml'"
-    ]
+      "echo 'Registering the system and configuring update channels...'",
+      "sudo transactional-update register -r ${var.registration_code}",
+      <<-EOF
+      #!/bin/bash
+      set -e
+      set -x
 
-    connection {
-      type        = "ssh"
-      user        = "ec2-user"
-      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-      host        = aws_eip.ec2_eip.public_ip
-    }
+      echo "--- Starting single transactional shell for all updates ---"
+
+      sudo transactional-update shell <<'EOS'
+        set -e
+        set -x
+
+        echo "1. Refreshing new repositories and installing utilities..."
+        zypper --gpg-auto-import-keys refresh
+        zypper in -y curl jq
+
+        echo "2. Installing the base NVIDIA driver..."
+        zypper in -y --auto-agree-with-licenses nvidia-open-driver-G06-signed-cuda-kmp-default
+
+        echo "3. Determining the driver version..."
+        VERSION=`rpm -qa --queryformat '%%{VERSION}\n' nvidia-open-driver-G06-signed-cuda-kmp-default | cut -d '_' -f1 | sort -u | tail -n 1`
+
+        # Use curly braces for unambiguous variable expansion
+        if [ -z "$${VERSION}" ]; then
+          echo "FATAL: Could not determine NVIDIA driver version. Aborting."
+          exit 1
+        fi
+        echo "#### Determined Version: $${VERSION} ####"
+
+        echo "4. Installing version-specific NVIDIA utilities..."
+        # Use curly braces and add quotes for safety
+        zypper in -y --auto-agree-with-licenses "nvidia-compute-utils-G06=$${VERSION}"
+
+        echo "5. Setting up environment files..."
+        echo 'export KUBECONFIG=/etc/rancher/rke2/rke2.yaml' > /etc/profile.d/rke2.sh
+        echo 'export PATH=$PATH:/var/lib/rancher/rke2/bin:/usr/local/nvidia/toolkit' > /etc/profile.d/nvidia-toolkit.sh
+      EOS
+
+      echo "--- Transactional updates applied. Issuing reboot. ---"
+      sudo transactional-update reboot
+    EOF
+    ]
+    on_failure = fail
   }
 }
 
-#resource "null_resource" "download_kubeconfig" {
-#  depends_on = [null_resource.post_reboot]
-#  provisioner "remote-exec" {
-#    inline = [
-#      "sudo cp /etc/rancher/rke2/rke2.yaml /tmp/rke2.yaml",
-#      "sudo chown ec2-user:ec2-user /tmp/rke2.yaml",
-#      "sudo sed -i 's/127.0.0.1/${aws_eip.ec2_eip.public_ip}/g' /tmp/rke2.yaml"
-#    ]
-#
-#    connection {
-#      type        = "ssh"
-#      user        = "ec2-user"
-#      private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-#      host        = aws_eip.ec2_eip.public_ip
-#    }
-#  }
-#
-#  provisioner "local-exec" {
-#    command = "scp -o StrictHostKeyChecking=no -i ${path.module}/tf-ssh-private_key ec2-user@${aws_eip.ec2_eip.public_ip}:/tmp/rke2.yaml ${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
-#  }
-#}
+#--- Wait for VM to Reboot and Become Available ---
+resource "null_resource" "wait_for_reboot_completion" {
+  depends_on = [null_resource.post_reboot_update]
 
-
-resource "ssh_resource" "retrieve_kubeconfig" {
-  host = aws_eip.ec2_eip.public_ip
-  commands = [
-    "sudo sudo sed 's/127.0.0.1/${aws_eip.ec2_eip.public_ip}/g' /etc/rancher/rke2/rke2.yaml"
-  ]
-  user        = "ec2-user"
-  private_key = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
-}
-
-resource "local_file" "kube_config_yaml" {
-  filename        = "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
-  content         = ssh_resource.retrieve_kubeconfig.result
-  file_permission = "0600"
-}
-
-resource "local_file" "kube_config_yaml_backup" {
-  filename        = "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml.backup"
-  content         = ssh_resource.retrieve_kubeconfig.result
-  file_permission = "0600"
-}
-
-# Add a validation step to ensure the kubeconfig is ready
-resource "null_resource" "kubernetes_api_ready" {
-  depends_on = [local_file.kube_config_yaml]
+  triggers = {
+    update_trigger_id = null_resource.post_reboot_update.id
+  }
 
   provisioner "local-exec" {
-    command = <<-EOT
-      # Wait for the kubeconfig file to exist
-      while [ ! -f "${path.module}/kubeconfig-rke2.yaml" ]; do
-        echo "Waiting for kubeconfig file to be created..."
-        sleep 5
-      done
-      
-      # Try to reach the Kubernetes API
-      MAX_RETRIES=30
-      RETRY=0
-      until kubectl --kubeconfig=${path.module}/kubeconfig-rke2.yaml cluster-info; do
-        RETRY=$((RETRY+1))
-        if [ $RETRY -eq $MAX_RETRIES ]; then
-          echo "Failed to connect to Kubernetes API after $MAX_RETRIES attempts"
-          exit 1
+    environment = {
+      LOCAL_EXEC_SSH_USER            = var.ssh_user
+      LOCAL_EXEC_SSH_HOST            = azurerm_public_ip.test_public_ip.ip_address
+      LOCAL_EXEC_SSH_PRIVATE_KEY_PEM = var.use_existing_ssh_public_key ? data.local_file.ssh_private_key[0].content : tls_private_key.ssh_keypair[0].private_key_openssh
+    }
+
+    command = <<EOT
+      #!/bin/sh
+      set -e
+
+      echo "Executing with Trigger ID: ${self.triggers.update_trigger_id}"
+
+      TMP_KEY_PATH=`mktemp`
+      trap 'echo "Cleaning up temporary SSH key $${TMP_KEY_PATH}"; rm -f "$${TMP_KEY_PATH}"' EXIT
+
+      printf '%s\n' "$${LOCAL_EXEC_SSH_PRIVATE_KEY_PEM}" > "$${TMP_KEY_PATH}"
+      chmod 600 "$${TMP_KEY_PATH}"
+
+      sleep 45
+
+      ATTEMPTS=0
+      MAX_ATTEMPTS=24
+      WAIT_SECONDS=25
+
+      echo "Polling VM SSH at $${LOCAL_EXEC_SSH_USER}@$${LOCAL_EXEC_SSH_HOST}..."
+
+      while [ $${ATTEMPTS} -lt $${MAX_ATTEMPTS} ]; do
+        ATTEMPTS=`expr $${ATTEMPTS} + 1`
+
+        echo "Attempting to connect (Attempt $${ATTEMPTS}/$${MAX_ATTEMPTS})..."
+        if ssh -i "$${TMP_KEY_PATH}" \
+             -q \
+             -o ConnectTimeout=10 \
+             -o ConnectionAttempts=1 \
+             -o BatchMode=yes \
+             -o StrictHostKeyChecking=no \
+             -o UserKnownHostsFile=/dev/null \
+             "$${LOCAL_EXEC_SSH_USER}@$${LOCAL_EXEC_SSH_HOST}" \
+             "echo 'SSH connection successful post-reboot'"; then
+          echo "VM is back online after transactional update and reboot."
+          exit 0
         fi
-        echo "Waiting for Kubernetes API to become available... (attempt $RETRY/$MAX_RETRIES)"
-        sleep 10
+        echo "VM not yet reachable, waiting $${WAIT_SECONDS}s..."
+        sleep "$${WAIT_SECONDS}"
       done
-      echo "Kubernetes API is ready"
+
+      echo "Error: VM ($${LOCAL_EXEC_SSH_HOST}) did not come back online after $${MAX_ATTEMPTS} attempts."
+      exit 1
     EOT
   }
 }
