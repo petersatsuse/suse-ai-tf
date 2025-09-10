@@ -7,16 +7,27 @@ locals {
   kc_file_name = var.kubeconfig_path == null ? "${path.cwd}/${var.instance_prefix}-kubeconfig-rke2.yaml" : var.kubeconfig_path
 }
 
-# Infrastructure module
-module "rke2_node" {
-  source                      = "./modules/infrastructure/"
-  aws_region                  = var.aws_region
+# The "cloud" module dynamically sources the correct cloud-specific module.
+module "cloud" {
+  source = local.is_azure ? "./modules/azure" : "./modules/aws"
+
+  # Pass all relevant variables
+  region                      = var.region
   instance_prefix             = var.instance_prefix
   instance_type               = var.instance_type
+  ssh_user                    = var.ssh_user
+  common_tags                 = var.common_tags
+  registration_code           = var.registration_code
   use_existing_ssh_public_key = var.use_existing_ssh_public_key
   user_ssh_private_key        = var.user_ssh_private_key
-  user_ssh_public_key         = var.user_ssh_public_key
-  registration_code           = var.registration_code
+
+  # Pass cloud-specific variables
+  # AWS
+  ami                      = var.aws_ami
+  user_ssh_public_key_name = var.user_ssh_public_key_name
+  # Azure
+  image                = var.azure_image
+  user_ssh_public_key  = var.user_ssh_public_key
 }
 
 # Create a local file signal to indicate when infrastructure is ready
