@@ -1,18 +1,46 @@
+variable "cloud_provider" {
+  description = "The cloud provider to deploy to. Must be 'aws' or 'azure'."
+  type        = string
+}
+
 variable "instance_prefix" {
   type        = string
   default     = "suse-ai"
-  description = "Prefix added to names of EC2 instance"
+  description = "Prefix added to names of instance"
 }
 
-variable "aws_region" {
+variable "ssh_user" {
+  description = "The SSH username for the virtual machine (e.g., 'azureuser' or 'ec2-user')."
   type        = string
-  description = "Specifies the AWS region to deploy all resources"
+}
+
+variable "region" {
+  type        = string
+  description = "Specifies the region to deploy all resources"
 }
 
 variable "instance_type" {
   type        = string
-  default     = "g4dn.xlarge"
-  description = "Type of EC2 instance"
+  default     = ""
+  description = "Type of instance, e.g AWS: g4dn.xlarge or Azure: xxx"
+}
+
+variable "common_tags" {
+  description = "A map of common tags to apply to all resources."
+  type        = map(string)
+  default     = {}
+}
+
+variable "azure_image" {
+  description = "The Azure VM image to use, in the format 'publisher:offer:sku:version'."
+  type        = string
+  default     = ""
+}
+
+variable "aws_ami" {
+  description = "The AMI ID to use for the AWS instance."
+  type        = string
+  default     = ""
 }
 
 variable "use_existing_ssh_public_key" {
@@ -35,7 +63,7 @@ variable "user_ssh_public_key" {
 
 variable "registration_code" {
   type        = string
-  description = "SUSE registration code"
+  description = "SUSE registration code for SLE Micro"
 }
 
 variable "registry_name" {
