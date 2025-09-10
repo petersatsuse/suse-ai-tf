@@ -1,5 +1,10 @@
 locals {
-  kc_file_name = var.kubeconfig_path == null ? "${path.root}/modules/infrastructure/${var.instance_prefix}-kubeconfig-rke2.yaml" : var.kubeconfig_path
+  is_azure = lower(var.cloud_provider) == "azure"
+  is_aws   = lower(var.cloud_provider) == "aws"
+
+  active_infra_outputs = one(concat(module.cloud, module.cloud)) # This will be correctly populated by one of the modules below
+
+  kc_file_name = var.kubeconfig_path == null ? "${path.cwd}/${var.instance_prefix}-kubeconfig-rke2.yaml" : var.kubeconfig_path
 }
 
 # Infrastructure module

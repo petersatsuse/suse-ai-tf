@@ -2,6 +2,11 @@
 
 This project provides Terraform configurations to automate the deployment of the SUSE AI Stack on an Amazon Web Services (AWS) EC2 instance (default -> g4dn.xlarge for GPU) running SUSE Linux Enterprise Micro 6.1.
 
+Structure:
+ Root Module: An orchestrator that dynamically calls the correct cloud module.
+ Cloud Module (aws or azure): Builds only the base, OS-provisioned VM.
+ K8s Module: Takes the ready VM and installs the cloud-agnostic software stack.
+
 ## Prerequisites
 
 Before you begin, ensure you have the following:
@@ -46,7 +51,7 @@ This Terraform setup will perform the following actions:
     ```
 
 2.  **Configure Terraform Variables:**
-    
+
     - Copy `./terraform.tfvars.example` to `./terraform.tfvars`
     - Edit `./terraform.tfvars`
     - For example:
@@ -71,7 +76,7 @@ This Terraform setup will perform the following actions:
 
 5.  **Apply the Configuration:**
     ```bash
-    terraform apply -auto-approve 
+    terraform apply -auto-approve
     ```
     Terraform will now provision the EC2 instance and deploy the SUSE AI Stack. This process may take some time.
 
@@ -88,7 +93,7 @@ To access the webUI for the SUSE AI:
 * **Add below entry in your system's `/etc/hosts`:**
     ```bash
     <PUBLIC_IP_OF_EC2_INSTANCE>  suse-ollama-webui
-    
+
 * **Open WebUI:** Now you can access the Open WebUI interface through your web browser using the below URL:
     ```
     https://suse-ollama-webui
