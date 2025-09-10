@@ -37,6 +37,12 @@ variable "azure_image" {
   default     = ""
 }
 
+variable "azure_rg_prefix" {
+  description = "A prefix for the randomly generated Azure resource group name."
+  type        = string
+  default     = "rg"
+}
+
 variable "aws_ami" {
   description = "The AMI ID to use for the AWS instance."
   type        = string
