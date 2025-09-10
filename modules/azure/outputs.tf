@@ -1,6 +1,6 @@
 output "public_ip" {
   description = "Public IP of the instance."
-  value       = azurerm_public_ip.main.ip_address
+  value       = azurerm_public_ip.test_public_ip.ip_address
 }
 
 output "ssh_private_key_content" {
