@@ -32,55 +32,55 @@ module "cloud" {
 
 # Create a local file signal to indicate when infrastructure is ready
 #resource "local_file" "kubeconfig_ready_signal" {
-  filename        = "${path.root}/.kubeconfig-ready"
-  content         = "Kubeconfig is ready at ${timestamp()}"
-  file_permission = "0644"
+#  filename        = "${path.root}/.kubeconfig-ready"
+#  content         = "Kubeconfig is ready at ${timestamp()}"
+#  file_permission = "0644"
 
-  depends_on = [module.rke2_node]
+#  depends_on = [module.rke2_node]
 #}
 
 #resource "null_resource" "wait_for_kubeconfig" {
-  triggers = {
-    kubeconfig_ready = timestamp() # Force re-evaluation
-  }
+#  triggers = {
+#    kubeconfig_ready = timestamp() # Force re-evaluation
+#  }
 
-  provisioner "local-exec" {
-    command = "while [ ! -f ${path.root}/modules/infrastructure/kubeconfig-rke2.yaml ]; do sleep 5; done"
-  }
+#  provisioner "local-exec" {
+#    command = "while [ ! -f ${path.root}/modules/infrastructure/kubeconfig-rke2.yaml ]; do sleep 5; done"
+#  }
 
-  depends_on = [module.rke2_node]
+#  depends_on = [module.rke2_node]
 #}
 
 #data "local_file" "kubeconfig" {
-  filename = "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
+#  filename = "${path.root}/modules/infrastructure/kubeconfig-rke2.yaml"
 
-  depends_on = [null_resource.wait_for_kubeconfig]
+#  depends_on = [null_resource.wait_for_kubeconfig]
 #}
 
 #resource "local_file" "kube_config_yaml" {
-  filename        = "${path.root}/modules/infrastructure/${var.instance_prefix}-kubeconfig-rke2.yaml"
-  file_permission = "0600"
-  content         = data.local_file.kubeconfig.content
+#  filename        = "${path.root}/modules/infrastructure/${var.instance_prefix}-kubeconfig-rke2.yaml"
+#  file_permission = "0600"
+#  content         = data.local_file.kubeconfig.content
 
-  depends_on = [data.local_file.kubeconfig]
+#  depends_on = [data.local_file.kubeconfig]
 #}
 
 # Setup Kubernetes Provider
 #provider "kubernetes" {
-  alias       = "k8s"
-  config_path = local_file.kube_config_yaml.filename
+#  alias       = "k8s"
+#  config_path = local_file.kube_config_yaml.filename
 #}
 
 #provider "helm" {
-  kubernetes {
-    config_path = local_file.kube_config_yaml.filename
-  }
+#  kubernetes {
+#    config_path = local_file.kube_config_yaml.filename
+#  }
 
-  registry {
-    url      = "oci://${var.registry_name}"
-    username = var.registry_username
-    password = var.registry_password
-  }
+#  registry {
+#    url      = "oci://${var.registry_name}"
+#    username = var.registry_username
+#    password = var.registry_password
+#  }
 #}
 
 # The "kubernetes" module handles all application deployment
