@@ -9,6 +9,11 @@ output "ssh_private_key_content" {
   sensitive   = true
 }
 
+output "ssh_public_key_content" {
+  description = "Content of the SSH public key."
+  value       = var.use_existing_ssh_public_key ? var.user_ssh_public_key : one(tls_private_key.ssh_keypair[*]).public_key_openssh
+}
+
 output "ssh_user" {
   description = "The SSH user for the created VM."
   value       = var.ssh_user
